@@ -16,47 +16,57 @@ func bytesToBinary(data []byte) string {
 	}
 	return builder.String()
 }
-func WriteToFrames(data []byte, frameWidth, frameHeight int) []image.Image {
+
+func WriteToFrames(frameWidth, frameHeight int, metadata []FileData) ([]image.Image, []FileData) {
 	frames := []image.Image{}
-	binaryString := bytesToBinary(data)
-	noOfFrames := len(binaryString) / (frameHeight * frameWidth)
-	leftover := len(binaryString) % (frameHeight * frameWidth)
-	for i := 0; i < noOfFrames; i++ {
-		frame := image.NewGray(image.Rect(0, 0, frameWidth, frameHeight))
-		frameContent := ""
-		if i == noOfFrames-1 {
-			frameContent = binaryString[i*frameHeight*frameWidth:]
-		}
-		frameContent = binaryString[i*frameHeight*frameWidth : (i+1)*frameHeight*frameWidth]
-		for c := 0; c < frameHeight; c++ {
-			for r := 0; r < frameWidth; r++ {
-				bit := frameContent[c*frameHeight+r]
-				if bit == '0' {
-					frame.SetGray(r, c, color.Gray{Y: 0}) 
+	totalPixels := frameHeight * frameWidth
+	currentByte := uint(0)
+	currentFrame := uint(0)
+
+	for i := range metadata {
+		binaryString := bytesToBinary(metadata[i].Content)
+		remainingBits := len(binaryString)
+		bitIndex := 0
+
+		metadata[i].Position.FrameNumber = currentFrame
+		metadata[i].Position.StartOffset = currentByte
+
+		for remainingBits > 0 {
+			frame := image.NewGray(image.Rect(0, 0, frameWidth, frameHeight))
+			bitsInThisFrame := min(totalPixels, remainingBits)
+
+			for j := 0; j < bitsInThisFrame; j++ {
+				r := j % frameWidth
+				c := j / frameWidth
+				if binaryString[bitIndex+j] == '0' {
+					frame.SetGray(r, c, color.Gray{Y: 0})
 				} else {
-					frame.SetGray(r, c, color.Gray{Y: 255}) 
+					frame.SetGray(r, c, color.Gray{Y: 255})
 				}
 			}
-		}
-		frames = append(frames, frame)
-	}
-	if leftover > 0 {
-		frame := image.NewGray(image.Rect(0, 0, frameWidth, frameHeight))
-		frameContent := binaryString[noOfFrames*frameHeight*frameWidth:]
 
-		// Fill the remaining pixels
-		for i := 0; i < len(frameContent); i++ {
-			c := i / frameWidth
-			r := i % frameWidth
-
-			bit := frameContent[i]
-			if bit == '0' {
-				frame.SetGray(r, c, color.Gray{Y: 0}) // Black pixel
-			} else {
-				frame.SetGray(r, c, color.Gray{Y: 255}) // White pixel
+			for j := bitsInThisFrame; j < totalPixels; j++ {
+				r := j % frameWidth
+				c := j / frameWidth
+				frame.SetGray(r, c, color.Gray{Y: 0}) // Black pixel for padding
 			}
+
+			frames = append(frames, frame)
+			bitIndex += bitsInThisFrame
+			remainingBits -= bitsInThisFrame
+			currentFrame++
+			currentByte += uint(bitsInThisFrame / 8)
 		}
-		frames = append(frames, frame)
+
+		metadata[i].Position.EndOffset = currentByte
 	}
-	return frames
+
+	return frames, metadata
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

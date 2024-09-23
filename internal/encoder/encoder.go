@@ -11,14 +11,6 @@ import (
 
 var BytesWritten int
 
-type FileData struct {
-	fileSize uint
-	fileName string
-	fileType string
-	position video.FramePosition
-	content  []byte
-}
-
 type encoder struct {
 	dataPath string
 	config   EncoderConfig
@@ -35,6 +27,7 @@ func NewDataEncoder(dataPath string, config EncoderConfig) *encoder {
 
 func (enc *encoder) Encode() {
 	files, readDirErr := os.ReadDir(enc.dataPath)
+	var fileDataList []video.FileData
 	if readDirErr != nil {
 		slog.Error("Could not read files from directory", "msg", readDirErr.Error())
 	}
@@ -51,23 +44,24 @@ func (enc *encoder) Encode() {
 		if readFileErr != nil {
 			slog.Error("Could not read file in bytes", "msg", readFileErr.Error())
 		}
-		_ = FileData{
-			fileSize: uint(len(bytesData)),
-			fileName: fileName,
-			fileType: fileType,
-			content:  bytesData,
-			position: video.FramePosition{
-				FrameNumber: uint(BytesWritten) / uint(enc.config.ImageHeight*enc.config.ImageWidth),
-				StartOffset: uint(BytesWritten),
-				EndOffset:   uint(BytesWritten + len(bytesData)),
-			},
+		metadata := video.FileData{
+			FileSize: uint(len(bytesData)),
+			FileName: fileName,
+			FileType: fileType,
+			Content:  bytesData,
 		}
+		fileDataList = append(fileDataList, metadata)
 		allBytes = append(allBytes, bytesData...)
 
 	}
+	frames, updatedMetaData := video.WriteToFrames(int(enc.config.ImageWidth), int(enc.config.ImageHeight), fileDataList)
 	videoObject := video.Video{
-		Frames: video.WriteToFrames(allBytes, int(enc.config.ImageWidth), int(enc.config.ImageHeight)),
+		Frames:   frames,
+		MetaData: updatedMetaData,
 	}
-	videoObject.CreateFromFrames("sample.mp4", "output", enc.config.FrameRate)
+	err := videoObject.CreateFromFrames("sample.mp4", "output", enc.config.FrameRate)
+	if err != nil {
+		slog.Error("Error creating video", "msg", err.Error())
+	}
 
 }
