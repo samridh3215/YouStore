@@ -36,9 +36,10 @@ func writeMetaDataToFile(metaDataSting string) {
 }
 
 func (v *Video) CreateFromFrames(videoName string, outputDir string, frameRate int) error {
-	_, existErr := os.Open(videoName)
-	if os.IsExist(existErr) {
-		slog.Error("Video name already exists. Choose other name", "name", videoName)
+	_, existErr := os.Stat(videoName)
+	if !os.IsNotExist(existErr) {
+		slog.Error("Video name already exists. Choose another name", "existing file name", videoName)
+		fmt.Println("Enter a new video name (entering same name will overwrite it): ")
 		fmt.Scanln(&videoName)
 	}
 	if _, err := os.Stat(outputDir); !os.IsNotExist(err) {
@@ -75,16 +76,17 @@ func (v *Video) CreateFromFrames(videoName string, outputDir string, frameRate i
 
 	// Construct FFmpeg command with metadata as a comment
 	cmd := exec.Command(
-    "ffmpeg",
-    "-framerate", fmt.Sprintf("%d", frameRate),
-    "-i", filepath.Join(outputDir, "frame_%04d.png"),
-    "-c:v", "mpeg4",  // Fallback to mpeg4 codec
-    "-q:v", "5",      // Adjust quality (lower values mean higher quality)
-    "-metadata", fmt.Sprintf("comment=%s", string(metadataJSON)),
-    videoName,
-)
+		"ffmpeg",
+		"-framerate", fmt.Sprintf("%d", frameRate),
+		"-i", filepath.Join(outputDir, "frame_%04d.png"),
+		"-c:v", "mpeg4", // Fallback to mpeg4 codec
+		"-q:v", "5", // Adjust quality (lower values mean higher quality)
+		"-metadata", fmt.Sprintf("comment=%s", string(metadataJSON)),
+		"-y",
+		videoName,
+	)
 
-	cmd.Stdout = os.Stdout	
+	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
 	if err != nil {
